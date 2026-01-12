@@ -7,6 +7,8 @@ import MyOrders from "./MyOrders";
 import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
 import React, { useEffect, useState } from "react";
 
+const API = "https://ai-ecommerce-analytics-production.up.railway.app";
+
 function App() {
   const [user, setUser] = useState(localStorage.getItem("user"));
   const [products, setProducts] = useState([]);
@@ -36,8 +38,7 @@ function App() {
 
   // Load products
   useEffect(() => {
-    fetch("https://ai-ecommerce-analytics-production.up.railway.app"
-)
+    fetch(`${API}/products`)
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) setProducts(data);
@@ -83,7 +84,7 @@ function App() {
       return;
     }
 
-    const res = await fetch("https://ai-ecommerce-analytics-production.up.railway.app", {
+    const res = await fetch(`${API}/order`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, cart, total })
@@ -108,12 +109,13 @@ function App() {
       {/* NAVBAR */}
       <div style={{ padding: 10, background: "#222", color: "#fff" }}>
         <Link to="/" style={{ color: "#fff", marginRight: 15 }}>Home</Link>
+
         {!user && (
-  <>
-    <Link to="/login">Login</Link>
-    <Link to="/signup" style={{ marginLeft: 10 }}>Signup</Link>
-  </>
-)}
+          <>
+            <Link to="/login" style={{ color: "#fff" }}>Login</Link>
+            <Link to="/signup" style={{ marginLeft: 10, color: "#fff" }}>Signup</Link>
+          </>
+        )}
 
         {user && (
           <>
@@ -121,6 +123,7 @@ function App() {
             <button style={{ marginLeft: 10 }} onClick={logout}>Logout</button>
           </>
         )}
+
         <Link to="/myorders" style={{ marginLeft: 15, color: "#fff" }}>My Orders</Link>
         <Link to="/admin" style={{ marginLeft: 15, color: "#fff" }}>Admin</Link>
       </div>
@@ -135,7 +138,6 @@ function App() {
               <div style={{ padding: "20px" }}>
                 <h1>🛒 E-Commerce Store</h1>
 
-                {/* PRODUCTS GRID */}
                 <div style={{
                   display: "grid",
                   gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
@@ -187,7 +189,6 @@ function App() {
                   ))}
                 </div>
 
-                {/* CART */}
                 <h2 style={{ marginTop: "30px" }}>🛒 Cart</h2>
 
                 {cart.map(item => (
@@ -227,11 +228,10 @@ function App() {
         />
 
         <Route path="/login" element={<Login setUser={setUser} />} />
+        <Route path="/signup" element={<Signup />} />
         <Route path="/myorders" element={<PrivateRoute><MyOrders /></PrivateRoute>} />
         <Route path="/admin" element={<PrivateRoute adminOnly={true}><Admin /></PrivateRoute>} />
         <Route path="/payment" element={<Payment />} />
-        <Route path="/signup" element={<Signup />} />
-
 
       </Routes>
     </BrowserRouter>

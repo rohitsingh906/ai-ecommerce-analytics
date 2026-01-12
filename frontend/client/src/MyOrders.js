@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 
+const API = "https://ai-ecommerce-analytics-production.up.railway.app";
+
 export default function MyOrders() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const userId = localStorage.getItem("userId");
+  const token = localStorage.getItem("token");
 
   useEffect(() => {
     if (!userId) {
@@ -12,7 +15,11 @@ export default function MyOrders() {
       return;
     }
 
-    fetch(`https://ai-ecommerce-analytics-production.up.railway.app/myorders/${userId}`)
+    fetch(`${API}/myorders/${userId}`, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    })
       .then(res => res.json())
       .then(data => {
         console.log("MY ORDERS 👉", data);
@@ -31,7 +38,7 @@ export default function MyOrders() {
         setLoading(false);
       });
 
-  }, [userId]);   // 🔥 THIS FIXES NETLIFY BUILD ERROR
+  }, [userId, token]);   // ✅ Netlify-safe dependency
 
   if (loading) {
     return <h3 style={{ padding: 20 }}>Loading orders...</h3>;
@@ -41,7 +48,9 @@ export default function MyOrders() {
     <div style={{ padding: 20 }}>
       <h2>📦 My Orders</h2>
 
-      {orders.length === 0 && <p>No orders found</p>}
+      {orders.length === 0 && (
+        <p style={{ marginTop: 20 }}>No orders found.</p>
+      )}
 
       {orders.map((o, index) => (
         <div
