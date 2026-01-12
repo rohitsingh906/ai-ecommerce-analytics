@@ -10,73 +10,78 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ---------------- LOGGER ----------------
-app.use((req, res, next) => {
-  console.log("👉", req.method, req.url);
-  next();
-});
+// ---------- PORT ----------
+const PORT = process.env.PORT || 5055;
 
-// ---------------- DATABASE (Railway) ----------------
+// ---------- DATABASE (Railway) ----------
 const db = mysql.createConnection(process.env.MYSQL_URL);
 
 db.connect(err => {
   if (err) {
-    console.log("❌ DB Error:", err);
+    console.error("❌ DB connection failed:", err);
   } else {
-    console.log("✅ Railway MySQL Connected");
+    console.log("✅ Connected to Railway MySQL");
   }
 });
 
-// ---------------- ROOT ----------------
+// ---------- ROOT ----------
 app.get("/", (req, res) => {
   res.send("Backend Running OK");
 });
 
-// ---------------- PRODUCTS ----------------
+// ---------- PRODUCTS ----------
 app.get("/products", (req, res) => {
   db.query("SELECT * FROM products", (err, rows) => {
     if (err) {
-      console.log(err);
+      console.error(err);
       return res.json([]);
     }
     res.json(rows || []);
   });
 });
 
-// ---------------- SIGNUP ----------------
+// ---------- SIGNUP ----------
 app.post("/signup", async (req, res) => {
   const { name, email, password } = req.body;
-  const hash = await bcrypt.hash(password, 10);
 
-  db.query(
-    "INSERT INTO users(name,email,password) VALUES (?,?,?)",
-    [name, email, hash],
-    err => {
-      if (err) {
-        console.log(err);
-        return res.json({ message: "Email already exists" });
+  try {
+    const hash = await bcrypt.hash(password, 10);
+
+    db.query(
+      "INSERT INTO users(name,email,password,role) VALUES (?,?,?,?)",
+      [name, email, hash, "user"],
+      err => {
+        if (err) {
+          console.error(err);
+          return res.json({ message: "Email already exists" });
+        }
+        res.json({ message: "Signup successful" });
       }
-      res.json({ message: "Signup successful" });
-    }
-  );
+    );
+  } catch (e) {
+    res.json({ message: "Signup error" });
+  }
 });
 
-// ---------------- LOGIN ----------------
+// ---------- LOGIN ----------
 app.post("/login", (req, res) => {
   const { email, password } = req.body;
 
   db.query("SELECT * FROM users WHERE email=?", [email], async (err, result) => {
-    if (err || result.length === 0)
+    if (err || result.length === 0) {
       return res.json({ message: "User not found" });
+    }
 
     const user = result[0];
     const ok = await bcrypt.compare(password, user.password);
     if (!ok) return res.json({ message: "Wrong password" });
 
-    const token = jwt.sign({ id: user.user_id, role: user.role }, "secret123");
+    const token = jwt.sign(
+      { id: user.user_id, role: user.role },
+      process.env.JWT_SECRET || "secret123"
+    );
 
     res.json({
-      message: "Login successful",
       token,
       name: user.name,
       role: user.role,
@@ -85,18 +90,22 @@ app.post("/login", (req, res) => {
   });
 });
 
-// ---------------- PLACE ORDER ----------------
+// ---------- PLACE ORDER ----------
 app.post("/order", (req, res) => {
   const { userId, cart, total } = req.body;
 
-  if (!cart || cart.length === 0)
+  if (!cart || cart.length === 0) {
     return res.json({ message: "Cart empty" });
+  }
 
   db.query(
     "INSERT INTO orders (user_id, total_amount) VALUES (?,?)",
     [userId, total],
     (err, result) => {
-      if (err) return res.json({ message: "Order failed" });
+      if (err) {
+        console.error(err);
+        return res.json({ message: "Order failed" });
+      }
 
       const orderId = result.insertId;
 
@@ -107,15 +116,13 @@ app.post("/order", (req, res) => {
         );
       });
 
-      res.json({ message: "Order placed successfully", orderId });
+      res.json({ orderId });
     }
   );
 });
 
-// ---------------- MY ORDERS ----------------
+// ---------- MY ORDERS ----------
 app.get("/myorders/:userId", (req, res) => {
-  const userId = req.params.userId;
-
   const sql = `
     SELECT 
       o.order_id,
@@ -131,13 +138,16 @@ app.get("/myorders/:userId", (req, res) => {
     ORDER BY o.order_id DESC
   `;
 
-  db.query(sql, [userId], (err, rows) => {
-    if (err) return res.json([]);
+  db.query(sql, [req.params.userId], (err, rows) => {
+    if (err) {
+      console.error(err);
+      return res.json([]);
+    }
     res.json(rows || []);
   });
 });
 
-// ---------------- ADMIN SALES ----------------
+// ---------- ADMIN SALES ----------
 app.get("/admin/sales", (req, res) => {
   const sql = `
     SELECT DATE(created_at) as order_date, SUM(total_amount) as revenue
@@ -152,9 +162,7 @@ app.get("/admin/sales", (req, res) => {
   });
 });
 
-// ---------------- PORT ----------------
-const PORT = process.env.PORT || 5055;
-
+// ---------- START ----------
 app.listen(PORT, () => {
   console.log("🚀 Backend running on port", PORT);
 });
