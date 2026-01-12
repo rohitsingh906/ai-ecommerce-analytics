@@ -16,20 +16,14 @@ app.use((req, res, next) => {
   next();
 });
 
-// ---------------- RAILWAY MYSQL ----------------
-const db = mysql.createPool({
-  uri: process.env.MYSQL_URL,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
-});
+// ---------------- DATABASE (Railway) ----------------
+const db = mysql.createConnection(process.env.MYSQL_URL);
 
-db.getConnection((err, conn) => {
+db.connect(err => {
   if (err) {
-    console.error("❌ Railway MySQL Error:", err);
+    console.log("❌ DB Error:", err);
   } else {
-    console.log("✅ Connected to Railway MySQL");
-    conn.release();
+    console.log("✅ Railway MySQL Connected");
   }
 });
 
@@ -42,7 +36,7 @@ app.get("/", (req, res) => {
 app.get("/products", (req, res) => {
   db.query("SELECT * FROM products", (err, rows) => {
     if (err) {
-      console.error("Products error:", err);
+      console.log(err);
       return res.json([]);
     }
     res.json(rows || []);
@@ -52,42 +46,37 @@ app.get("/products", (req, res) => {
 // ---------------- SIGNUP ----------------
 app.post("/signup", async (req, res) => {
   const { name, email, password } = req.body;
+  const hash = await bcrypt.hash(password, 10);
 
-  try {
-    const hash = await bcrypt.hash(password, 10);
-
-    db.query(
-      "INSERT INTO users(name,email,password,role) VALUES (?,?,?,'user')",
-      [name, email, hash],
-      err => {
-        if (err) {
-          console.error("Signup error:", err);
-          return res.json({ message: "Email already exists" });
-        }
-        res.json({ message: "Signup successful" });
+  db.query(
+    "INSERT INTO users(name,email,password) VALUES (?,?,?)",
+    [name, email, hash],
+    err => {
+      if (err) {
+        console.log(err);
+        return res.json({ message: "Email already exists" });
       }
-    );
-  } catch {
-    res.json({ message: "Signup failed" });
-  }
+      res.json({ message: "Signup successful" });
+    }
+  );
 });
 
 // ---------------- LOGIN ----------------
 app.post("/login", (req, res) => {
   const { email, password } = req.body;
 
-  db.query("SELECT * FROM users WHERE email=?", [email], async (err, rows) => {
-    if (err || rows.length === 0)
+  db.query("SELECT * FROM users WHERE email=?", [email], async (err, result) => {
+    if (err || result.length === 0)
       return res.json({ message: "User not found" });
 
-    const user = rows[0];
+    const user = result[0];
     const ok = await bcrypt.compare(password, user.password);
-
     if (!ok) return res.json({ message: "Wrong password" });
 
     const token = jwt.sign({ id: user.user_id, role: user.role }, "secret123");
 
     res.json({
+      message: "Login successful",
       token,
       name: user.name,
       role: user.role,
@@ -107,10 +96,7 @@ app.post("/order", (req, res) => {
     "INSERT INTO orders (user_id, total_amount) VALUES (?,?)",
     [userId, total],
     (err, result) => {
-      if (err) {
-        console.error("Order error:", err);
-        return res.json({ message: "Order failed" });
-      }
+      if (err) return res.json({ message: "Order failed" });
 
       const orderId = result.insertId;
 
@@ -121,13 +107,15 @@ app.post("/order", (req, res) => {
         );
       });
 
-      res.json({ orderId });
+      res.json({ message: "Order placed successfully", orderId });
     }
   );
 });
 
 // ---------------- MY ORDERS ----------------
 app.get("/myorders/:userId", (req, res) => {
+  const userId = req.params.userId;
+
   const sql = `
     SELECT 
       o.order_id,
@@ -143,11 +131,8 @@ app.get("/myorders/:userId", (req, res) => {
     ORDER BY o.order_id DESC
   `;
 
-  db.query(sql, [req.params.userId], (err, rows) => {
-    if (err) {
-      console.error("MyOrders error:", err);
-      return res.json([]);
-    }
+  db.query(sql, [userId], (err, rows) => {
+    if (err) return res.json([]);
     res.json(rows || []);
   });
 });
@@ -162,34 +147,14 @@ app.get("/admin/sales", (req, res) => {
   `;
 
   db.query(sql, (err, rows) => {
-    if (err) {
-      console.error("Admin sales error:", err);
-      return res.json([]);
-    }
+    if (err) return res.json([]);
     res.json(rows || []);
   });
 });
 
-// ---------------- ADMIN STATS ----------------
-app.get("/admin/stats", (req, res) => {
-  const stats = {};
-
-  db.query("SELECT COUNT(*) AS users FROM users", (e1, u) => {
-    stats.users = u[0].users;
-
-    db.query("SELECT COUNT(*) AS products FROM products", (e2, p) => {
-      stats.products = p[0].products;
-
-      db.query("SELECT SUM(total_amount) AS revenue FROM orders", (e3, r) => {
-        stats.revenue = r[0].revenue || 0;
-        res.json(stats);
-      });
-    });
-  });
-});
-
-// ---------------- START ----------------
+// ---------------- PORT ----------------
 const PORT = process.env.PORT || 5055;
+
 app.listen(PORT, () => {
-  console.log("🚀 Server running on port", PORT);
+  console.log("🚀 Backend running on port", PORT);
 });
