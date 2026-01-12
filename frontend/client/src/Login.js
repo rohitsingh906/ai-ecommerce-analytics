@@ -6,7 +6,7 @@ export default function Login({ setUser }) {
   const navigate = useNavigate();
 
   const handleSubmit = async () => {
-    const res = await fetch("http://127.0.0.1:5055/login", {
+    const res = await fetch("https://ai-ecommerce-analytics-production.up.railway.app", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form)
