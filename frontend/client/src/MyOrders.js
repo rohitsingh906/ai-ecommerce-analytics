@@ -1,35 +1,40 @@
 import { useEffect, useState } from "react";
 
 export default function MyOrders() {
-
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+
   const userId = localStorage.getItem("userId");
 
   useEffect(() => {
-    fetch(`http://127.0.0.1:5055/myorders/${userId}`)
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
+
+    fetch(`https://ai-ecommerce-analytics-production.up.railway.app/myorders/${userId}`)
       .then(res => res.json())
       .then(data => {
-        console.log("MY ORDERS DATA 👉", data);
+        console.log("MY ORDERS 👉", data);
 
-        // 🔥 If backend returns object instead of array, fix it
         if (Array.isArray(data)) {
           setOrders(data);
         } else {
-          setOrders([]);   // no crash
+          setOrders([]);
         }
 
         setLoading(false);
       })
       .catch(err => {
-        console.error(err);
+        console.error("Order fetch error:", err);
         setOrders([]);
         setLoading(false);
       });
-  }, []);
+
+  }, [userId]);   // 🔥 THIS FIXES NETLIFY BUILD ERROR
 
   if (loading) {
-    return <h3>Loading orders...</h3>;
+    return <h3 style={{ padding: 20 }}>Loading orders...</h3>;
   }
 
   return (
@@ -39,7 +44,16 @@ export default function MyOrders() {
       {orders.length === 0 && <p>No orders found</p>}
 
       {orders.map((o, index) => (
-        <div key={index} style={{ border: "1px solid gray", padding: 10, marginBottom: 10 }}>
+        <div
+          key={index}
+          style={{
+            border: "1px solid #ccc",
+            padding: "12px",
+            marginBottom: "12px",
+            borderRadius: "8px",
+            background: "#f9f9f9"
+          }}
+        >
           <p><b>Order ID:</b> {o.order_id}</p>
           <p><b>Product:</b> {o.name}</p>
           <p><b>Quantity:</b> {o.quantity}</p>
