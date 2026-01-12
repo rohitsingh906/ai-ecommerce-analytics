@@ -16,17 +16,21 @@ app.use((req, res, next) => {
   next();
 });
 
-// ---------------- DB ----------------
-const db = mysql.createConnection({
-  host: "localhost",
-  user: "root",
-  password: "Tihor@9060",
-  database: "ai_ecommerce"
+// ---------------- RAILWAY MYSQL ----------------
+const db = mysql.createPool({
+  uri: process.env.MYSQL_URL,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
 });
 
-db.connect(err => {
-  if (err) console.log("❌ DB Error:", err);
-  else console.log("✅ Database connected");
+db.getConnection((err, conn) => {
+  if (err) {
+    console.error("❌ Railway MySQL Error:", err);
+  } else {
+    console.log("✅ Connected to Railway MySQL");
+    conn.release();
+  }
 });
 
 // ---------------- ROOT ----------------
@@ -37,7 +41,10 @@ app.get("/", (req, res) => {
 // ---------------- PRODUCTS ----------------
 app.get("/products", (req, res) => {
   db.query("SELECT * FROM products", (err, rows) => {
-    if (err) return res.json([]);
+    if (err) {
+      console.error("Products error:", err);
+      return res.json([]);
+    }
     res.json(rows || []);
   });
 });
@@ -45,34 +52,42 @@ app.get("/products", (req, res) => {
 // ---------------- SIGNUP ----------------
 app.post("/signup", async (req, res) => {
   const { name, email, password } = req.body;
-  const hash = await bcrypt.hash(password, 10);
 
-  db.query(
-    "INSERT INTO users(name,email,password) VALUES (?,?,?)",
-    [name, email, hash],
-    err => {
-      if (err) return res.json({ message: "Email already exists" });
-      res.json({ message: "Signup successful" });
-    }
-  );
+  try {
+    const hash = await bcrypt.hash(password, 10);
+
+    db.query(
+      "INSERT INTO users(name,email,password,role) VALUES (?,?,?,'user')",
+      [name, email, hash],
+      err => {
+        if (err) {
+          console.error("Signup error:", err);
+          return res.json({ message: "Email already exists" });
+        }
+        res.json({ message: "Signup successful" });
+      }
+    );
+  } catch {
+    res.json({ message: "Signup failed" });
+  }
 });
 
 // ---------------- LOGIN ----------------
 app.post("/login", (req, res) => {
   const { email, password } = req.body;
 
-  db.query("SELECT * FROM users WHERE email=?", [email], async (err, result) => {
-    if (err || result.length === 0)
+  db.query("SELECT * FROM users WHERE email=?", [email], async (err, rows) => {
+    if (err || rows.length === 0)
       return res.json({ message: "User not found" });
 
-    const user = result[0];
+    const user = rows[0];
     const ok = await bcrypt.compare(password, user.password);
+
     if (!ok) return res.json({ message: "Wrong password" });
 
     const token = jwt.sign({ id: user.user_id, role: user.role }, "secret123");
 
     res.json({
-      message: "Login successful",
       token,
       name: user.name,
       role: user.role,
@@ -92,7 +107,10 @@ app.post("/order", (req, res) => {
     "INSERT INTO orders (user_id, total_amount) VALUES (?,?)",
     [userId, total],
     (err, result) => {
-      if (err) return res.json({ message: "Order failed" });
+      if (err) {
+        console.error("Order error:", err);
+        return res.json({ message: "Order failed" });
+      }
 
       const orderId = result.insertId;
 
@@ -103,15 +121,13 @@ app.post("/order", (req, res) => {
         );
       });
 
-      res.json({ message: "Order placed successfully", orderId });
+      res.json({ orderId });
     }
   );
 });
 
-// ---------------- MY ORDERS (CRASH PROOF) ----------------
+// ---------------- MY ORDERS ----------------
 app.get("/myorders/:userId", (req, res) => {
-  const userId = req.params.userId;
-
   const sql = `
     SELECT 
       o.order_id,
@@ -127,13 +143,16 @@ app.get("/myorders/:userId", (req, res) => {
     ORDER BY o.order_id DESC
   `;
 
-  db.query(sql, [userId], (err, rows) => {
-    if (err || !rows) return res.json([]);
-    res.json(rows);
+  db.query(sql, [req.params.userId], (err, rows) => {
+    if (err) {
+      console.error("MyOrders error:", err);
+      return res.json([]);
+    }
+    res.json(rows || []);
   });
 });
 
-// ---------------- ADMIN SALES GRAPH ----------------
+// ---------------- ADMIN SALES ----------------
 app.get("/admin/sales", (req, res) => {
   const sql = `
     SELECT DATE(created_at) as order_date, SUM(total_amount) as revenue
@@ -143,8 +162,11 @@ app.get("/admin/sales", (req, res) => {
   `;
 
   db.query(sql, (err, rows) => {
-    if (err || !rows) return res.json([]);
-    res.json(rows);
+    if (err) {
+      console.error("Admin sales error:", err);
+      return res.json([]);
+    }
+    res.json(rows || []);
   });
 });
 
@@ -160,7 +182,6 @@ app.get("/admin/stats", (req, res) => {
 
       db.query("SELECT SUM(total_amount) AS revenue FROM orders", (e3, r) => {
         stats.revenue = r[0].revenue || 0;
-
         res.json(stats);
       });
     });
@@ -168,6 +189,7 @@ app.get("/admin/stats", (req, res) => {
 });
 
 // ---------------- START ----------------
-app.listen(5055, () => {
-  console.log("🔥 Backend running on http://127.0.0.1:5055");
+const PORT = process.env.PORT || 5055;
+app.listen(PORT, () => {
+  console.log("🚀 Server running on port", PORT);
 });
