@@ -13,14 +13,25 @@ app.use(express.json());
 // ---------- PORT ----------
 const PORT = process.env.PORT || 5055;
 
-// ---------- DATABASE (Railway) ----------
-const db = mysql.createConnection(process.env.MYSQL_URL);
+// ---------- DATABASE (Railway MySQL Pool) ----------
+if (!process.env.MYSQL_URL) {
+  console.error("❌ MYSQL_URL not found in Railway Variables");
+  process.exit(1);
+}
 
-db.connect(err => {
+const db = mysql.createPool({
+  uri: process.env.MYSQL_URL,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
+});
+
+db.getConnection((err, conn) => {
   if (err) {
-    console.error("❌ DB connection failed:", err);
+    console.error("❌ Railway MySQL Error:", err);
   } else {
     console.log("✅ Connected to Railway MySQL");
+    conn.release();
   }
 });
 
@@ -44,6 +55,10 @@ app.get("/products", (req, res) => {
 app.post("/signup", async (req, res) => {
   const { name, email, password } = req.body;
 
+  if (!name || !email || !password) {
+    return res.json({ message: "All fields required" });
+  }
+
   try {
     const hash = await bcrypt.hash(password, 10);
 
@@ -59,6 +74,7 @@ app.post("/signup", async (req, res) => {
       }
     );
   } catch (e) {
+    console.error(e);
     res.json({ message: "Signup error" });
   }
 });
@@ -82,6 +98,7 @@ app.post("/login", (req, res) => {
     );
 
     res.json({
+      message: "Login successful",
       token,
       name: user.name,
       role: user.role,
@@ -159,6 +176,26 @@ app.get("/admin/sales", (req, res) => {
   db.query(sql, (err, rows) => {
     if (err) return res.json([]);
     res.json(rows || []);
+  });
+});
+
+// ---------- ADMIN STATS ----------
+app.get("/admin/stats", (req, res) => {
+  const stats = {};
+
+  db.query("SELECT COUNT(*) AS users FROM users", (e1, u) => {
+    if (e1) return res.json({});
+    stats.users = u[0].users;
+
+    db.query("SELECT COUNT(*) AS products FROM products", (e2, p) => {
+      if (e2) return res.json(stats);
+      stats.products = p[0].products;
+
+      db.query("SELECT SUM(total_amount) AS revenue FROM orders", (e3, r) => {
+        stats.revenue = r[0].revenue || 0;
+        res.json(stats);
+      });
+    });
   });
 });
 
