@@ -1,3 +1,4 @@
+import Signup from "./Signup";
 import Payment from "./Payment";
 import Admin from "./Admin";
 import PrivateRoute from "./PrivateRoute";
@@ -107,7 +108,13 @@ function App() {
       {/* NAVBAR */}
       <div style={{ padding: 10, background: "#222", color: "#fff" }}>
         <Link to="/" style={{ color: "#fff", marginRight: 15 }}>Home</Link>
-        {!user && <Link to="/login" style={{ color: "#fff" }}>Login</Link>}
+        {!user && (
+  <>
+    <Link to="/login">Login</Link>
+    <Link to="/signup" style={{ marginLeft: 10 }}>Signup</Link>
+  </>
+)}
+
         {user && (
           <>
             <span style={{ marginLeft: 15 }}>Welcome, {user}</span>
@@ -223,6 +230,8 @@ function App() {
         <Route path="/myorders" element={<PrivateRoute><MyOrders /></PrivateRoute>} />
         <Route path="/admin" element={<PrivateRoute adminOnly={true}><Admin /></PrivateRoute>} />
         <Route path="/payment" element={<Payment />} />
+        <Route path="/signup" element={<Signup />} />
+
 
       </Routes>
     </BrowserRouter>
